@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>地下水统测信息提取器</title>
+<style>
+:root {
+  --bg: #0d1117; --card: #161b22; --input: #21262d;
+  --border: #30363d; --fg: #e6edf3; --muted: #8b949e;
+  --accent: #58a6ff; --green: #3fb950; --red: #f85149; --yellow: #d2991d;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--fg); min-height: 100vh; }
+header { background: var(--card); border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; align-items: center; gap: 12px; }
+header h1 { font-size: 16px; }
+header .badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: var(--input); color: var(--green); }
+main { max-width: 1400px; margin: 0 auto; padding: 24px; }
+
+/* Upload zone */
+.dropzone {
+  border: 2px dashed var(--border); border-radius: 12px; padding: 60px 20px;
+  text-align: center; cursor: pointer; transition: all .2s;
+  background: var(--card); margin-bottom: 24px;
+}
+.dropzone:hover, .dropzone.dragover { border-color: var(--accent); background: rgba(88,166,255,.05); }
+.dropzone .icon { font-size: 48px; margin-bottom: 12px; }
+.dropzone p { color: var(--muted); font-size: 14px; }
+.dropzone .btn { display: inline-block; margin-top: 12px; padding: 8px 20px; background: var(--accent); color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; }
+
+/* File list */
+.file-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.file-tag { background: var(--input); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-size: 12px; display: flex; align-items: center; gap: 6px; }
+.file-tag .remove { cursor: pointer; color: var(--red); font-weight: bold; }
+
+/* Actions */
+.actions { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
+.actions button { padding: 8px 16px; border: none; border-radius: 6px; font-size: 13px; cursor: pointer; font-weight: 500; }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-success { background: var(--green); color: #fff; }
+.btn-outline { background: transparent; border: 1px solid var(--border); color: var(--fg); }
+
+/* Progress */
+.progress { height: 4px; background: var(--input); border-radius: 2px; margin-bottom: 16px; overflow: hidden; }
+.progress-bar { height: 100%; background: var(--accent); transition: width .3s; }
+
+/* Table */
+.table-wrap { overflow-x: auto; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th { background: var(--input); padding: 8px 6px; text-align: left; font-weight: 600; white-space: nowrap; border-bottom: 1px solid var(--border); position: sticky; top: 0; }
+td { padding: 4px 6px; border-bottom: 1px solid var(--border); }
+td input { width: 100%; background: transparent; border: 1px solid transparent; color: var(--fg); font-size: 12px; padding: 3px 4px; border-radius: 3px; }
+td input:focus { border-color: var(--accent); background: var(--input); outline: none; }
+tr:hover { background: rgba(88,166,255,.03); }
+.empty { text-align: center; padding: 40px; color: var(--muted); }
+
+/* Status colors */
+.val-ok { color: var(--fg); }
+.val-empty { color: var(--muted); font-style: italic; }
+.val-warn { color: var(--yellow); }
+
+/* Toast */
+.toast { position: fixed; bottom: 20px; right: 20px; background: var(--green); color: #fff; padding: 10px 20px; border-radius: 8px; font-size: 13px; display: none; z-index: 100; }
+.toast.error { background: var(--red); }
+</style>
+</head>
+<body>
+<header>
+  <h1>💧 地下水统测信息提取器</h1>
+  <span class="badge" id="status">就绪</span>
+</header>
+<main>
+  <!-- Upload -->
+  <div class="dropzone" id="dropzone">
+    <div class="icon">📸</div>
+    <p>拖拽截图到此处，或点击选择文件</p>
+    <p style="font-size:11px;margin-top:4px">支持 JPG/PNG，可多选</p>
+    <button class="btn" onclick="document.getElementById('fileInput').click()">选择文件</button>
+    <input type="file" id="fileInput" multiple accept="image/*" style="display:none" onchange="handleFiles(this.files)">
+  </div>
+
+  <!-- File list -->
+  <div class="file-list" id="fileList"></div>
+
+  <!-- Actions -->
+  <div class="actions" id="actions" style="display:none">
+    <button class="btn-primary" id="btnExtract" onclick="startExtract()">🔍 提取信息</button>
+    <button class="btn-outline" onclick="clearAll()">清空</button>
+    <span style="color:var(--muted);font-size:12px" id="countLabel"></span>
+    <button class="btn-success" id="btnExport" style="margin-left:auto;display:none" onclick="exportExcel()">📥 导出 Excel</button>
+  </div>
+
+  <!-- Progress -->
+  <div class="progress" id="progressWrap" style="display:none"><div class="progress-bar" id="progressBar"></div></div>
+
+  <!-- Results table -->
+  <div class="table-wrap" id="tableWrap" style="display:none">
+    <table><thead id="tableHead"></thead><tbody id="tableBody"></tbody></table>
+  </div>
+  <div class="empty" id="emptyState">上传截图开始提取</div>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+let files = [];
+let records = [];
+let sessionId = null;
+
+// Drag & drop
+const dz = document.getElementById('dropzone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('dragover'); handleFiles(e.dataTransfer.files); });
+
+document.getElementById('fileInput').addEventListener('change', e => handleFiles(e.target.files));
+
+function handleFiles(fileList) {
+  for (const f of fileList) {
+    if (f.type.startsWith('image/') && !files.find(x => x.name === f.name)) {
+      files.push(f);
+    }
+  }
+  renderFileList();
+}
+
+function renderFileList() {
+  const el = document.getElementById('fileList');
+  el.innerHTML = files.map((f, i) =>
+    `<span class="file-tag">📷 ${f.name} <span class="remove" onclick="removeFile(${i})">×</span></span>`
+  ).join('');
+  document.getElementById('actions').style.display = files.length ? 'flex' : 'none';
+  document.getElementById('countLabel').textContent = `${files.length} 个文件`;
+}
+
+function removeFile(i) { files.splice(i, 1); renderFileList(); }
+function clearAll() { files = []; records = []; sessionId = null; renderFileList(); renderTable(); }
+
+async function startExtract() {
+  if (!files.length) return;
+  
+  const btn = document.getElementById('btnExtract');
+  btn.disabled = true;
+  btn.textContent = '⏳ 提取中...';
+  document.getElementById('progressWrap').style.display = 'block';
+  document.getElementById('status').textContent = '提取中';
+  
+  const form = new FormData();
+  files.forEach(f => form.append('files', f));
+  
+  try {
+    const resp = await fetch('/api/upload', { method: 'POST', body: form });
+    const data = await resp.json();
+    sessionId = data.session_id;
+    records = data.records;
+    renderTable();
+    document.getElementById('btnExport').style.display = 'inline-block';
+    document.getElementById('emptyState').style.display = 'none';
+    showToast(`提取完成: ${records.length} 条记录`);
+  } catch(e) {
+    showToast('提取失败: ' + e.message, true);
+  }
+  
+  btn.disabled = false;
+  btn.textContent = '🔍 提取信息';
+  document.getElementById('progressWrap').style.display = 'none';
+  document.getElementById('status').textContent = '就绪';
+}
+
+const FIELDS = ['野外编号','日期','天气','井台高度','井深','测点距地面高度','地下水位埋深','测点距水面距离','井点类型','所属统测区类型','统测期','统测期次类型','含水介质','埋藏深度','承压性','测量人','记录人','审核人','统测实施单位'];
+
+function renderTable() {
+  const thead = document.getElementById('tableHead');
+  const tbody = document.getElementById('tableBody');
+  const wrap = document.getElementById('tableWrap');
+  
+  if (!records.length) { wrap.style.display = 'none'; return; }
+  
+  thead.innerHTML = '<tr><th>#</th><th>文件</th>' + FIELDS.map(f => `<th>${f}</th>`).join('') + '</tr>';
+  
+  tbody.innerHTML = records.map((r, i) => {
+    const fname = (r._filename || '').substring(0, 20);
+    return `<tr>
+      <td>${i+1}</td>
+      <td style="font-size:10px;color:var(--muted)">${fname}</td>
+      ${FIELDS.map(f => {
+        const v = r[f] || '';
+        const cls = v ? 'val-ok' : 'val-empty';
+        return `<td><input value="${esc(v)}" class="${cls}" data-idx="${i}" data-field="${f}" onchange="updateField(this)"></td>`;
+      }).join('')}
+    </tr>`;
+  }).join('');
+  
+  wrap.style.display = 'block';
+}
+
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+async function updateField(input) {
+  const idx = parseInt(input.dataset.idx);
+  const field = input.dataset.field;
+  const value = input.value;
+  
+  if (!sessionId) return;
+  
+  try {
+    await fetch(`/api/session/${sessionId}/update`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({index: idx, field, value})
+    });
+    records[idx][field] = value;
+    input.className = value ? 'val-ok' : 'val-empty';
+  } catch(e) {}
+}
+
+async function exportExcel() {
+  if (!sessionId) return;
+  const btn = document.getElementById('btnExport');
+  btn.textContent = '⏳ 生成中...';
+  
+  try {
+    const resp = await fetch(`/api/session/${sessionId}/export`, { method: 'POST' });
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `地下水统测表_${sessionId}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Excel 已下载');
+  } catch(e) {
+    showToast('导出失败', true);
+  }
+  btn.textContent = '📥 导出 Excel';
+}
+
+function showToast(msg, isError) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast' + (isError ? ' error' : '');
+  t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 3000);
+}
+</script>
+</body>
+</html>

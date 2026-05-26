@@ -1,0 +1,21 @@
+# Sensitive files
+mimo_config.json
+.license
+
+# Backups
+*.bak
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Build outputs
+build/
+dist/
+*.spec
+
+# Debug/test scripts
+debug_*.py
+test_*.py
+_test_*.py
+runtime_hook_*.py

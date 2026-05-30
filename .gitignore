@@ -1,9 +1,10 @@
-# Sensitive files
+﻿# Sensitive files
 mimo_config.json
 .license
 
 # Backups
 *.bak
+*.bak_perf
 
 # Python cache
 __pycache__/
@@ -12,10 +13,14 @@ __pycache__/
 # Build outputs
 build/
 dist/
-*.spec
 
 # Debug/test scripts
 debug_*.py
 test_*.py
 _test_*.py
 runtime_hook_*.py
+debug_log.txt
+
+# Output data
+output/
+uploads/

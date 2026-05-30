@@ -1,6 +1,6 @@
 
 """
-Well Extractor v2 — Futuristic Cyberpunk UI with EasyOCR engine.
+Well Extractor v2 — Light Luxury Minimalist UI with EasyOCR engine.
 """
 import sys, os, re, glob, shutil, tempfile
 from datetime import datetime
@@ -8,6 +8,29 @@ import numpy as np
 from PIL import Image
 import openpyxl
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+
+
+def normalize_date(val):
+    """Normalize any date string to YYYYMMDD (8 digits).
+
+    Handles: YYYY-MM-DD, YYYYMMDD, YYYY/MM/DD, YYYY年MM月DD日,
+    and malformed OCR output like 2026-052-1.
+    """
+    if not val:
+        return val
+    s = str(val).strip()
+    # Already clean 8-digit
+    if re.fullmatch(r'\d{8}', s):
+        return s
+    # Extract 4-digit year, then collect remaining digits
+    m = re.match(r'(\d{4})[^\d]*(\d{1,2})[^\d]*(\d{1,2})', s)
+    if m:
+        return f"{m.group(1)}{int(m.group(2)):02d}{int(m.group(3)):02d}"
+    # Last resort: strip all non-digits and take first 8
+    digits = re.sub(r'\D', '', s)
+    if len(digits) >= 8:
+        return digits[:8]
+    return s
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -68,7 +91,7 @@ def load_coord_index():
     wb = openpyxl.load_workbook(COORD_PATH, data_only=True)
     for sn in wb.sheetnames:
         ws = wb[sn]
-        for row in range(2, ws.max_row + 1):
+        for row in range(1, ws.max_row + 1):
             fid = ws.cell(row=row, column=1).value
             if not fid: continue
             fid = str(fid).strip()
@@ -135,187 +158,212 @@ def batch_merge_coordinates(records, coord_path=None):
 # ── Neon Cyberpunk Stylesheet ───────────────────────────────────────
 NEON_STYLE = """
 QMainWindow {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-        stop:0 #0a0a1a, stop:0.5 #0d0d2b, stop:1 #0a0a1a);
+    background: #FAFAFA;
 }
 QMenuBar {
-    background: rgba(10, 10, 30, 0.95);
-    color: #00f0ff;
-    border-bottom: 1px solid #00f0ff44;
+    background: #FFFFFF;
+    color: #333333;
+    border-bottom: 1px solid #E8E8E8;
     padding: 4px;
     font-size: 13px;
 }
 QMenuBar::item:selected {
-    background: #00f0ff22;
-    border: 1px solid #00f0ff66;
+    background: #F0F0F0;
     border-radius: 4px;
 }
 QMenu {
-    background: #0d0d2b;
-    color: #e0e0ff;
-    border: 1px solid #00f0ff44;
+    background: #FFFFFF;
+    color: #333333;
+    border: 1px solid #E0E0E0;
     border-radius: 8px;
     padding: 4px;
 }
 QMenu::item:selected {
-    background: #00f0ff22;
+    background: #F5F5F5;
     border-radius: 4px;
 }
 QPushButton {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-        stop:0 #00f0ff22, stop:1 #ff00ff22);
-    color: #00f0ff;
-    border: 1px solid #00f0ff55;
-    border-radius: 8px;
-    padding: 8px 20px;
+    background: #FFFFFF;
+    color: #555555;
+    border: 1px solid #D0D0D0;
+    border-radius: 6px;
+    padding: 7px 18px;
     font-size: 13px;
-    font-weight: bold;
 }
 QPushButton:hover {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-        stop:0 #00f0ff44, stop:1 #ff00ff44);
-    border: 1px solid #00f0ffaa;
+    background: #F5F5F5;
+    border: 1px solid #B0B0B0;
 }
 QPushButton:pressed {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-        stop:0 #00f0ff66, stop:1 #ff00ff66);
+    background: #EBEBEB;
 }
 QPushButton#btnExtract {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-        stop:0 #00ff8844, stop:1 #00f0ff44);
-    color: #ffffff;
+    background: #2C2C2C;
+    color: #FFFFFF;
+    border: none;
     font-size: 14px;
-    padding: 10px 30px;
-    text-shadow: 0 0 8px #00ff88;
+    padding: 9px 28px;
+    font-weight: bold;
+    letter-spacing: 1px;
 }
 QPushButton#btnExtract:hover {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-        stop:0 #00ff8866, stop:1 #00f0ff66);
+    background: #444444;
+}
+QPushButton#btnExtract:disabled {
+    background: #C0C0C0;
+    color: #888888;
 }
 QPushButton#btnExport {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-        stop:0 #ff00ff44, stop:1 #ff880044);
-    color: #fff;
+    background: #1A1A1A;
+    color: #FFFFFF;
+    border: none;
     font-size: 14px;
-    padding: 10px 30px;
+    padding: 9px 28px;
+    font-weight: bold;
+}
+QPushButton#btnExport:hover {
+    background: #333333;
 }
 QPushButton#btnCoord {
-    background: #ff880022;
-    color: #ff8800;
-    border: 1px solid #ff880055;
-    border-radius: 8px;
-    padding: 8px 20px;
+    background: #FFFFFF;
+    color: #666666;
+    border: 1px solid #D0D0D0;
+    border-radius: 6px;
+    padding: 7px 18px;
     font-size: 13px;
-    font-weight: bold;
 }
 QPushButton#btnCoord:hover {
-    background: #ff880044;
-    border: 1px solid #ff8800aa;
+    background: #F5F5F5;
+    border: 1px solid #B0B0B0;
 }
 QPushButton#btnImport {
-    background: #00f0ff22;
-    color: #00f0ff;
-    border: 1px dashed #00f0ff55;
-    font-size: 16px;
-    padding: 20px;
-    border-radius: 12px;
+    background: #FFFFFF;
+    color: #888888;
+    border: 1.5px dashed #C0C0C0;
+    font-size: 15px;
+    padding: 18px;
+    border-radius: 10px;
 }
 QPushButton#btnImport:hover {
-    background: #00f0ff33;
-    border: 1px solid #00f0ff88;
+    border: 1.5px dashed #999999;
+    color: #555555;
+    background: #FAFAFA;
 }
 QProgressBar {
-    background: #0a0a1a;
-    border: 1px solid #00f0ff33;
-    border-radius: 6px;
+    background: #F0F0F0;
+    border: none;
+    border-radius: 4px;
     text-align: center;
-    color: #00f0ff;
-    font-weight: bold;
-    height: 18px;
+    color: #666666;
+    font-size: 11px;
+    height: 22px;
 }
 QProgressBar::chunk {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-        stop:0 #00f0ff, stop:0.5 #00ff88, stop:1 #ff00ff);
-    border-radius: 5px;
+        stop:0 #2C2C2C, stop:1 #555555);
+    border-radius: 4px;
 }
 QTableWidget {
-    background: rgba(10, 10, 30, 0.8);
-    color: #e0e0ff;
-    border: 1px solid #00f0ff22;
+    background: #FFFFFF;
+    color: #333333;
+    border: 1px solid #E8E8E8;
     border-radius: 8px;
-    gridline-color: #00f0ff11;
+    gridline-color: #F0F0F0;
     font-size: 12px;
-    alternate-background-color: rgba(0, 240, 255, 0.03);
+    alternate-background-color: #FAFAFA;
 }
 QTableWidget::item {
-    padding: 6px 10px;
-    border-bottom: 1px solid #00f0ff08;
+    padding: 5px 10px;
+    border-bottom: 1px solid #F0F0F0;
 }
 QTableWidget::item:selected {
-    background: #00f0ff22;
-    color: #fff;
+    background: #E8E8E8;
+    color: #1A1A1A;
 }
 QHeaderView::section {
-    background: #0d0d2b;
-    color: #00f0ff;
+    background: #F8F8F8;
+    color: #555555;
     border: none;
-    border-bottom: 2px solid #00f0ff44;
+    border-bottom: 2px solid #E0E0E0;
+    border-right: 1px solid #E8E8E8;
     padding: 8px 10px;
     font-weight: bold;
     font-size: 12px;
 }
 QGroupBox {
-    color: #00f0ff;
-    border: 1px solid #00f0ff22;
+    color: #555555;
+    border: 1px solid #E8E8E8;
     border-radius: 10px;
     margin-top: 16px;
     padding-top: 20px;
     font-weight: bold;
     font-size: 13px;
+    background: #FFFFFF;
 }
 QGroupBox::title {
     subcontrol-origin: margin;
     left: 16px;
     padding: 0 8px;
-    color: #00f0ff;
+    color: #666666;
 }
 QLabel {
-    color: #c0c0f0;
+    color: #666666;
     font-size: 12px;
 }
 QLabel#statusLabel {
-    color: #00ff88;
+    color: #2C2C2C;
     font-size: 13px;
     font-weight: bold;
 }
 QLabel#titleLabel {
-    color: #00f0ff;
+    color: #1A1A1A;
     font-size: 22px;
     font-weight: bold;
+    letter-spacing: 2px;
 }
 QLabel#subtitleLabel {
-    color: #8080c0;
-    font-size: 14px;
+    color: #999999;
+    font-size: 13px;
 }
 QSplitter::handle {
-    background: #00f0ff22;
-    width: 2px;
+    background: #E8E8E8;
+    width: 1px;
 }
 QScrollBar:vertical {
-    background: #0a0a1a;
-    width: 8px;
-    border-radius: 4px;
+    background: #FAFAFA;
+    width: 7px;
+    border-radius: 3px;
 }
 QScrollBar::handle:vertical {
-    background: #00f0ff33;
-    border-radius: 4px;
+    background: #CCCCCC;
+    border-radius: 3px;
     min-height: 30px;
 }
 QScrollBar::handle:vertical:hover {
-    background: #00f0ff55;
+    background: #AAAAAA;
 }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
     height: 0px;
+}
+QRadioButton {
+    color: #555555;
+    font-size: 12px;
+    spacing: 6px;
+}
+QRadioButton::indicator {
+    width: 16px;
+    height: 16px;
+    border-radius: 9px;
+    border: 2px solid #CCCCCC;
+    background: #FFFFFF;
+}
+QRadioButton::indicator:checked {
+    background: #2C2C2C;
+    border: 2px solid #2C2C2C;
+}
+QFrame[frameShape="4"] {
+    background: #E8E8E8;
+    max-height: 1px;
 }
 """
 
@@ -358,10 +406,11 @@ class ExtractWorker(QThread):
                     if "调查日期" not in r or not r.get("调查日期"):
                         r["调查日期"] = datetime.now().strftime("%Y%m%d")
                     # Discard ALL OCR/screenshot coordinates — coordinate file is authoritative
-                    # 经纬度、XY坐标、地面高程、测点高程 均使用坐标文件数据
                     for k in ("经度", "纬度", "地面高程", "测点高程", "X", "Y"):
                         r.pop(k, None)
                     records.append(r)
+                else:
+                    records.append({"_source": os.path.basename(f), "_error": "MiMo 识别失败，请检查 API Key 和网络"})
             except Exception as e:
                 records.append({"_source": os.path.basename(f), "_error": str(e)})
             self.progress.emit(int((i + 1) / total * 100))
@@ -403,7 +452,7 @@ class ExtractWorker(QThread):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("HYDRA EXTRACTOR // 地下水统测信息提取系统 v2.0")
+        self.setWindowTitle("地下水统测信息提取系统 v2.0")
         self.resize(1500, 900)
         self.setMinimumSize(1100, 650)
         self.records = []
@@ -423,9 +472,9 @@ class MainWindow(QMainWindow):
         # ── Header ──
         header = QHBoxLayout()
         title_block = QVBoxLayout()
-        title = QLabel("HYDRA EXTRACTOR")
+        title = QLabel("地下水统测信息提取器")
         title.setObjectName("titleLabel")
-        subtitle = QLabel("地下水统测信息提取系统  //  AI-Powered OCR Engine")
+        subtitle = QLabel("AI-Powered OCR Engine  ·  轻奢简约版")
         subtitle.setObjectName("subtitleLabel")
         title_block.addWidget(title)
         title_block.addWidget(subtitle)
@@ -434,7 +483,6 @@ class MainWindow(QMainWindow):
         
         self.status_label = QLabel("就绪 // READY")
         self.status_label.setObjectName("statusLabel")
-        self.status_label.setStyleSheet("font-size: 13px; color: #00ff88;")
         header.addWidget(self.status_label)
         
         main_layout.addLayout(header)
@@ -450,31 +498,21 @@ class MainWindow(QMainWindow):
         
         # ── Engine selector ──
         engine_frame = QFrame()
-        engine_frame.setStyleSheet("QFrame { background: rgba(0,240,255,0.05); border: 1px solid #00f0ff33; border-radius: 10px; padding: 4px 8px; }")
+        engine_frame.setStyleSheet("QFrame { background: #F8F8F8; border: 1px solid #E8E8E8; border-radius: 8px; padding: 4px 8px; }")
         engine_layout = QHBoxLayout(engine_frame)
         engine_layout.setContentsMargins(8, 2, 8, 2)
         engine_layout.setSpacing(8)
         
         engine_label = QLabel("识别引擎")
-        engine_label.setStyleSheet("color: #8080c0; font-size: 11px; background: transparent; border: none;")
+        engine_label.setStyleSheet("color: #999999; font-size: 11px; background: transparent; border: none;")
         engine_layout.addWidget(engine_label)
         
         self.engine_group = QButtonGroup(self)
         
-        self.rb_easyocr = QRadioButton("EasyOCR")
-        self.rb_easyocr.setStyleSheet("""
-            QRadioButton { color: #c0c0f0; font-size: 11px; font-weight: bold; background: transparent; spacing: 4px; }
-            QRadioButton::indicator { width: 14px; height: 14px; border-radius: 8px; border: 2px solid #00f0ff55; background: rgba(0,240,255,0.05); }
-            QRadioButton::indicator:checked { background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #00f0ff, stop:1 #00ff88); border: 2px solid #00f0ff; }
-        """)
+        self.rb_easyocr = QRadioButton("PP-OCR")
         self.rb_easyocr.setChecked(True)
         
         self.rb_mimo = QRadioButton("MiMo")
-        self.rb_mimo.setStyleSheet("""
-            QRadioButton { color: #c0c0f0; font-size: 11px; font-weight: bold; background: transparent; spacing: 4px; }
-            QRadioButton::indicator { width: 14px; height: 14px; border-radius: 8px; border: 2px solid #ff00ff55; background: rgba(255,0,255,0.05); }
-            QRadioButton::indicator:checked { background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #ff00ff, stop:1 #ff8800); border: 2px solid #ff00ff; }
-        """)
         
         self.engine_group.addButton(self.rb_easyocr, 0)
         self.engine_group.addButton(self.rb_mimo, 1)
@@ -517,38 +555,38 @@ class MainWindow(QMainWindow):
         
         # Left: stats panel
         left = QFrame()
-        left.setStyleSheet("QFrame { background: rgba(0,240,255,0.03); border-radius: 12px; border: 1px solid #00f0ff22; }")
+        left.setStyleSheet("QFrame { background: #FFFFFF; border-radius: 12px; border: 1px solid #E8E8E8; }")
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(16, 16, 16, 16)
         
-        stats_group = QGroupBox("📊 统计面板")
+        stats_group = QGroupBox("统计面板")
         stats_layout = QVBoxLayout(stats_group)
         
         self.lbl_total = QLabel("待处理文件: 0")
-        self.lbl_total.setStyleSheet("font-size: 28px; font-weight: bold; color: #00f0ff;")
+        self.lbl_total.setStyleSheet("font-size: 28px; font-weight: bold; color: #1A1A1A;")
         stats_layout.addWidget(self.lbl_total)
         
         self.lbl_extracted = QLabel("已提取记录: 0")
-        self.lbl_extracted.setStyleSheet("font-size: 16px; color: #00ff88;")
+        self.lbl_extracted.setStyleSheet("font-size: 15px; color: #555555;")
         stats_layout.addWidget(self.lbl_extracted)
         
         self.lbl_coords = QLabel("含坐标记录: 0")
-        self.lbl_coords.setStyleSheet("font-size: 16px; color: #ff00ff;")
+        self.lbl_coords.setStyleSheet("font-size: 15px; color: #555555;")
         stats_layout.addWidget(self.lbl_coords)
         
         self.lbl_matched = QLabel("模板匹配: 0")
-        self.lbl_matched.setStyleSheet("font-size: 16px; color: #ff8800;")
+        self.lbl_matched.setStyleSheet("font-size: 15px; color: #555555;")
         stats_layout.addWidget(self.lbl_matched)
         
         stats_layout.addStretch()
         left_layout.addWidget(stats_group)
         
         # Recent files list
-        files_group = QGroupBox("📂 文件列表")
+        files_group = QGroupBox("文件列表")
         files_layout = QVBoxLayout(files_group)
         self.lbl_files = QLabel("拖拽或导入截图文件夹")
         self.lbl_files.setWordWrap(True)
-        self.lbl_files.setStyleSheet("color: #6060a0; font-size: 13px;")
+        self.lbl_files.setStyleSheet("color: #999999; font-size: 13px;")
         files_layout.addWidget(self.lbl_files)
         left_layout.addWidget(files_group)
         
@@ -575,14 +613,14 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(splitter, 1)
     
     def _apply_glow_effects(self):
-        """Apply neon glow to buttons."""
+        """Apply subtle shadow to primary buttons."""
         for btn_name in ["btnExtract", "btnExport"]:
             btn = self.findChild(QPushButton, btn_name)
             if btn:
                 shadow = QGraphicsDropShadowEffect()
-                shadow.setBlurRadius(20)
-                shadow.setColor(QColor("#00f0ff88" if "Extract" in btn_name else "#ff00ff88"))
-                shadow.setOffset(0, 0)
+                shadow.setBlurRadius(16)
+                shadow.setColor(QColor(0, 0, 0, 40))
+                shadow.setOffset(0, 2)
                 btn.setGraphicsEffect(shadow)
     
     def _import_folder(self):
@@ -603,7 +641,6 @@ class MainWindow(QMainWindow):
         self.btn_extract.setEnabled(len(self.files) > 0)
         self.btn_export.setVisible(False)
         self.status_label.setText(f"已加载 {len(self.files)} 个文件 // LOADED")
-        self.status_label.setStyleSheet("font-size: 13px; color: #ff8800;")
     
     def _import_coord(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -612,19 +649,16 @@ class MainWindow(QMainWindow):
             return
         self.coord_path = path
         self.lbl_coords.setText("坐标文件: {}".format(os.path.basename(path)))
-        self.lbl_coords.setStyleSheet("font-size: 16px; color: #ff8800;")
         self.status_label.setText("坐标已加载 // {}".format(os.path.basename(path)))
-        self.status_label.setStyleSheet("font-size: 13px; color: #ff8800;")
     
     def _on_engine_changed(self, btn):
         """Handle engine radio button selection."""
         if btn == self.rb_easyocr:
             self.engine = "easyocr"
-            self.status_label.setText("引擎: EasyOCR // 本地离线")
+            self.status_label.setText("引擎: PP-OCR // 本地离线")
         else:
             self.engine = "mimo"
             self.status_label.setText("引擎: MiMo // 云端视觉")
-        self.status_label.setStyleSheet("font-size: 13px; color: #00ff88;")
     
     def _extract(self):
         if not self.files:
@@ -634,7 +668,6 @@ class MainWindow(QMainWindow):
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
         self.status_label.setText("提取中... // PROCESSING")
-        self.status_label.setStyleSheet("font-size: 13px; color: #00f0ff;")
         
         self.worker = ExtractWorker(self.files, self.coord_path, engine=self.engine)
         self.worker.progress.connect(self._on_progress)
@@ -667,7 +700,6 @@ class MainWindow(QMainWindow):
         self.lbl_matched.setText(f"模板匹配: {matched}")
         
         self.status_label.setText(f"完成: {len(records)} 条 // {coords} 有坐标 // DONE")
-        self.status_label.setStyleSheet("font-size: 13px; color: #00ff88;")
     
     def _check_matches(self):
         try:
@@ -698,9 +730,9 @@ class MainWindow(QMainWindow):
             # Status
             st = r.get("_match_status", "")
             si = QTableWidgetItem(st)
-            if st == "已匹配": si.setForeground(QColor("#00ff88"))
-            elif st == "新增": si.setForeground(QColor("#00f0ff"))
-            elif st == "无编号": si.setForeground(QColor("#ff4488"))
+            if st == "已匹配": si.setForeground(QColor("#2E7D32"))
+            elif st == "新增": si.setForeground(QColor("#1565C0"))
+            elif st == "无编号": si.setForeground(QColor("#C62828"))
             self.table.setItem(i, 0, si)
             # Row
             mr = str(r.get("_match_row", "") or "")
@@ -708,18 +740,18 @@ class MainWindow(QMainWindow):
             # Source
             src = str(r.get("_source", "") or "")[:25]
             sri = QTableWidgetItem(src)
-            sri.setForeground(QColor("#505080"))
+            sri.setForeground(QColor("#999999"))
             self.table.setItem(i, 2, sri)
             # Fields
             for j, (fn, _) in enumerate(FIELDS):
                 val = str(r.get(fn, "") or "")
                 item = QTableWidgetItem(val)
                 if not val:
-                    item.setForeground(QColor("#303050"))
+                    item.setForeground(QColor("#CCCCCC"))
                 if fn == "野外编号" and val:
-                    item.setForeground(QColor("#00f0ff"))
+                    item.setForeground(QColor("#1565C0"))
                 if fn in ("经度", "纬度") and val:
-                    item.setForeground(QColor("#ff00ff"))
+                    item.setForeground(QColor("#6A1B9A"))
                 self.table.setItem(i, j + 3, item)
             if i % 10 == 0:
                 QApplication.processEvents()  # keep UI responsive every 10 rows
@@ -789,7 +821,7 @@ class MainWindow(QMainWindow):
                         try: cell.value = float(val)
                         except: cell.value = str(val)
                     elif key == "调查日期":
-                        cell.value = str(val).replace('-','')[:8]
+                        cell.value = normalize_date(val)
                     else:
                         cell.value = str(val)
             
@@ -797,7 +829,6 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "导出成功",
                 f"已保存到:\n{path}\n\n更新 {updated} 行，新增 {added} 行\n其中 {with_coords} 条已自动填入坐标")
             self.status_label.setText(f"已导出 // EXPORTED: {updated}+{added} rows")
-            self.status_label.setStyleSheet("font-size: 13px; color: #ff00ff;")
         except Exception as e:
             QMessageBox.critical(self, "导出失败", str(e))
     
@@ -811,8 +842,8 @@ class MainWindow(QMainWindow):
         self.lbl_coords.setText("含坐标记录: 0")
         self.lbl_matched.setText("模板匹配: 0")
         self.lbl_files.setText("拖拽或导入截图文件夹")
+        self.lbl_files.setStyleSheet("color: #999999; font-size: 13px;")
         self.status_label.setText("就绪 // READY")
-        self.status_label.setStyleSheet("font-size: 13px; color: #00ff88;")
 
 
 # ── License Dialog ───────────────────────────────────────────────────
@@ -833,9 +864,9 @@ class LicenseDialog(_QDialog):
         layout.setSpacing(14)
         layout.setContentsMargins(30, 24, 30, 24)
         
-        title = QLabel("🔐 软件授权验证")
+        title = QLabel("软件授权验证")
         title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("color: #00f0ff; font-size: 16px; font-weight: bold;")
+        title.setStyleSheet("color: #1A1A1A; font-size: 16px; font-weight: bold;")
         layout.addWidget(title)
         
         # Machine code row
@@ -847,8 +878,8 @@ class LicenseDialog(_QDialog):
         self.mc_box.setAlignment(Qt.AlignCenter)
         self.mc_box.setStyleSheet("""
             QLineEdit {
-                background: #0d0d2b; color: #ffaa00; border: 2px solid #ffaa0044;
-                border-radius: 8px; padding: 10px 14px; font-size: 15px;
+                background: #F8F8F8; color: #333333; border: 1px solid #E0E0E0;
+                border-radius: 6px; padding: 10px 14px; font-size: 15px;
                 font-weight: bold; letter-spacing: 2px;
             }
         """)
@@ -861,7 +892,7 @@ class LicenseDialog(_QDialog):
         layout.addLayout(mc_row)
         
         self._mc_feedback = QLabel("")
-        self._mc_feedback.setStyleSheet("color: #00ff88; font-size: 11px;")
+        self._mc_feedback.setStyleSheet("color: #2E7D32; font-size: 11px;")
         layout.addWidget(self._mc_feedback)
         
         layout.addSpacing(8)
@@ -887,15 +918,13 @@ class LicenseDialog(_QDialog):
         btn_activate = QPushButton("⚡ 激活")
         btn_activate.setStyleSheet("""
             QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #00ff8844, stop:1 #00f0ff44);
-                color: #fff; border: 1px solid #00f0ff88;
-                border-radius: 10px; padding: 10px 28px;
+                background: #2C2C2C;
+                color: #FFFFFF; border: none;
+                border-radius: 8px; padding: 10px 28px;
                 font-size: 15px; font-weight: bold;
             }
             QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #00ff8866, stop:1 #00f0ff66);
+                background: #444444;
             }
         """)
         btn_activate.clicked.connect(self._activate)

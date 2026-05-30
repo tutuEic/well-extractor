@@ -81,6 +81,28 @@ FIXED_VALUES = {
 # ── Coordinate loading ──────────────────────────────────────────────
 _coord_index = None
 
+
+
+
+def decimal_to_dms(dd, is_latitude=True):
+    """Convert decimal degrees to DMS string like 111°37'08.7369\" or 39°00'38.0697\""""
+    if dd is None or dd == '':
+        return None
+    try:
+        dd = float(dd)
+    except (ValueError, TypeError):
+        return None
+    direction = 'N' if is_latitude else 'E'
+    if dd < 0:
+        direction = 'S' if is_latitude else 'W'
+        dd = abs(dd)
+    degrees = int(dd)
+    minutes_full = (dd - degrees) * 60
+    minutes = int(minutes_full)
+    seconds = (minutes_full - minutes) * 60
+    return f"{degrees}°{minutes:02d}'{seconds:07.4f}\""
+
+
 def load_coord_index():
     global _coord_index
     if _coord_index is not None:
@@ -759,94 +781,182 @@ class MainWindow(QMainWindow):
     
     def _export(self):
         if not self.records:
-            QMessageBox.warning(self, "提示", "没有数据可导出")
+            QMessageBox.warning(self, "\u63d0\u793a", "\u6ca1\u6709\u6570\u636e\u53ef\u5bfc\u51fa")
             return
         path, _ = QFileDialog.getSaveFileName(
-            self, "导出填充表",
-            f"地下水统测表_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+            self, "\u5bfc\u51fa\u586b\u5145\u8868",
+            f"\u5730\u4e0b\u6c34\u7edf\u6d4b\u8868_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
             "Excel (*.xlsx)")
         if not path: return
-        
+
         try:
-            col_map = {f[0]: f[1] for f in FIELDS}
-            wb = openpyxl.load_workbook(TEMPLATE_PATH)
-            ws = wb["Sheet1"]
-            tf = Font(name='仿宋', size=10)
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "Sheet1"
+
+            # Styles
+            tf = Font(name='\u4eff\u5b8b', size=10)
             ta = Alignment(horizontal='center', vertical='center', wrap_text=True)
-            tb = Border(left=Side(style='thin'), right=Side(style='thin'),
-                        top=Side(style='thin'), bottom=Side(style='thin'))
-            
-            updated = added = with_coords = 0
+            tb = Border(
+                left=Side(style='thin'), right=Side(style='thin'),
+                top=Side(style='thin'), bottom=Side(style='thin'))
+            header_fill = PatternFill(start_color='FFFF00', end_color='FFFF00', fill_type='solid')
+
+            # Headers (36 columns matching reference format)
+            headers = [
+                '\u5e8f\u53f7', '\u7edf\u4e00\u7f16\u53f7', '\u91ce\u5916\u7f16\u53f7',
+                '\u8def\u7ebf\u7f16\u53f7', '\u8c03\u67e5\u65e5\u671f', '\u5730\u7406\u4f4d\u7f6e',
+                '\u5929\u6c14', 'E(\u7ecf\u5ea6)', 'N\uff08\u7eac\u5ea6\uff09',
+                'X', 'Y', '\u5730\u9762\u9ad8\u7a0b(m)',
+                '\u5730\u9762\u9ad8\u7a0b\u83b7\u53d6\u65b9\u6cd5',
+                '\u6d4b\u70b9\u9ad8\u7a0b\uff08m\uff09',
+                '\u6d4b\u70b9\u9ad8\u7a0b\u83b7\u53d6\u65b9\u6cd5',
+                '\u4e95\u53f0\u9ad8\u5ea6\uff08m\uff09',
+                '\u4e95\u6df1\uff08m\uff09',
+                '\u5730\u4e0b\u6c34\u8d44\u6e90\u533a\u540d\u79f0',
+                '\u6240\u5c5e\u7edf\u6d4b\u533a\u7c7b\u578b',
+                '\u4e95\u70b9\u7c7b\u578b',
+                '\u6d4b\u70b9\u8ddd\u5730\u9762\u9ad8\u5ea6\uff08m\uff09',
+                '\u5730\u4e0b\u6c34\u4f4d\u57cb\u6df1\uff08m\uff09',
+                '\u6d4b\u70b9\u8ddd\u6c34\u9762\u8ddd\u79bb\uff08m\uff09',
+                '\u6c34\u4f4d\u6807\u9ad8\uff08m\uff09',
+                '\u5730\u4e0b\u6c34\u7c7b\u578b\uff08\u6309\u542b\u6c34\u4ecb\u8d28\uff09',
+                '\u5730\u4e0b\u6c34\u7c7b\u578b\uff08\u6309\u57cb\u85cf\u6df1\u5ea6\uff09',
+                '\u5730\u4e0b\u6c34\u7c7b\u578b\uff08\u6309\u627f\u538b\u6027\uff09',
+                '\u7edf\u6d4b\u671f',
+                '\u7edf\u6d4b\u533a\u6240\u5c5e\u7edf\u6d4b\u671f\u6b21\u7c7b\u578b',
+                '\u7167\u7247\u7f16\u53f7', '\u89c6\u9891\u7f16\u53f7', '\u5907\u6ce8',
+                '\u7edf\u6d4b\u5b9e\u65bd\u5355\u4f4d',
+                '\u6d4b\u91cf\u4eba', '\u8bb0\u5f55\u4eba', '\u5ba1\u6838\u4eba',
+            ]
+
+            # Write headers with formatting
+            for ci, h in enumerate(headers, 1):
+                cell = ws.cell(row=1, column=ci, value=h)
+                cell.font = Font(name='\u4eff\u5b8b', size=10)
+                cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+                cell.border = Border(
+                    left=Side(style='thin'), right=Side(style='thin'),
+                    top=Side(style='thin'), bottom=Side(style='thin'))
+                cell.fill = header_fill
+            ws.row_dimensions[1].height = 26
+
+            # Column widths
+            widths = {
+                'A': 5, 'B': 12, 'C': 19, 'D': 12, 'E': 11, 'F': 51,
+                'G': 6, 'H': 26, 'I': 21, 'J': 15, 'K': 18, 'L': 12,
+                'M': 9, 'N': 15, 'O': 9, 'P': 9, 'Q': 10, 'R': 20,
+                'S': 11, 'T': 9, 'U': 13, 'V': 12, 'W': 12, 'X': 13,
+                'Y': 20, 'Z': 18, 'AA': 14, 'AB': 14, 'AC': 16,
+                'AD': 11, 'AE': 11, 'AF': 11, 'AG': 22, 'AH': 10,
+                'AI': 10, 'AJ': 10,
+            }
+            for letter, w in widths.items():
+                ws.column_dimensions[letter].width = w
+
+            # Field -> column mapping
+            col_map = {
+                '\u7edf\u4e00\u7f16\u53f7': 'B', '\u91ce\u5916\u7f16\u53f7': 'C',
+                '\u8def\u7ebf\u7f16\u53f7': 'D', '\u8c03\u67e5\u65e5\u671f': 'E',
+                '\u5730\u7406\u4f4d\u7f6e': 'F', '\u5929\u6c14': 'G',
+                '\u7ecf\u5ea6': 'H', '\u7eac\u5ea6': 'I',
+                'X': 'J', 'Y': 'K',
+                '\u5730\u9762\u9ad8\u7a0b': 'L',
+                '\u5730\u9762\u9ad8\u7a0b\u83b7\u53d6\u65b9\u6cd5': 'M',
+                '\u6d4b\u70b9\u9ad8\u7a0b': 'N',
+                '\u6d4b\u70b9\u9ad8\u7a0b\u83b7\u53d6\u65b9\u6cd5': 'O',
+                '\u4e95\u53f0\u9ad8\u5ea6': 'P', '\u4e95\u6df1': 'Q',
+                '\u5730\u4e0b\u6c34\u8d44\u6e90\u533a\u540d\u79f0': 'R',
+                '\u6240\u5c5e\u7edf\u6d4b\u533a\u7c7b\u578b': 'S',
+                '\u4e95\u70b9\u7c7b\u578b': 'T',
+                '\u6d4b\u70b9\u8ddd\u5730\u9762\u9ad8\u5ea6': 'U',
+                '\u5730\u4e0b\u6c34\u4f4d\u57cb\u6df1': 'V',
+                '\u6d4b\u70b9\u8ddd\u6c34\u9762\u8ddd\u79bb': 'W',
+                '\u6c34\u4f4d\u6807\u9ad8': 'X',
+                '\u542b\u6c34\u4ecb\u8d28': 'Y', '\u57cb\u85cf\u6df1\u5ea6': 'Z',
+                '\u627f\u538b\u6027': 'AA',
+                '\u7edf\u6d4b\u671f': 'AB',
+                '\u7edf\u6d4b\u671f\u6b21\u7c7b\u578b': 'AC',
+                '\u7167\u7247\u7f16\u53f7': 'AD', '\u89c6\u9891\u7f16\u53f7': 'AE',
+                '\u5907\u6ce8': 'AF',
+                '\u7edf\u6d4b\u5b9e\u65bd\u5355\u4f4d': 'AG',
+                '\u6d4b\u91cf\u4eba': 'AH', '\u8bb0\u5f55\u4eba': 'AI',
+                '\u5ba1\u6838\u4eba': 'AJ',
+            }
+            numeric_keys = ('\u4e95\u53f0\u9ad8\u5ea6', '\u4e95\u6df1',
+                            '\u6d4b\u70b9\u8ddd\u5730\u9762\u9ad8\u5ea6',
+                            '\u5730\u4e0b\u6c34\u4f4d\u57cb\u6df1',
+                            '\u6d4b\u70b9\u8ddd\u6c34\u9762\u8ddd\u79bb',
+                            '\u5730\u9762\u9ad8\u7a0b', '\u6d4b\u70b9\u9ad8\u7a0b',
+                            'X', 'Y')
+
             seen_ids = set()
-            
-            for record in self.records:
-                fid = str(record.get("野外编号", "")).strip()
-                if not fid or fid in seen_ids or fid == 'None': continue
+            row_num = 2
+            added = 0
+            for idx, record in enumerate(self.records):
+                fid = str(record.get('\u91ce\u5916\u7f16\u53f7', '')).strip()
+                if not fid or fid in seen_ids or fid == 'None':
+                    continue
                 seen_ids.add(fid)
-                if record.get("_has_coords"): with_coords += 1
-                
-                target = record.get("_match_row")
-                if target:
-                    updated += 1
-                else:
-                    target = ws.max_row + 1
-                    added += 1
-                    ws.row_dimensions[target].height = 36
-                
+                added += 1
+
+                ws.row_dimensions[row_num].height = 36
+                # 序号
+                ws.cell(row=row_num, column=1, value=idx + 1)
+
                 for key, col in col_map.items():
-                    val = record.get(key)
-                    
-                    # 水位标高 is always a formula
-                    if key == "水位标高":
-                        cell = ws[f"{col}{target}"]
-                        cell.font = tf; cell.alignment = ta; cell.border = tb
-                        cell.value = f"=L{target}-V{target}"
+                    if col in ('A',):
                         continue
-                    
+                    val = record.get(key)
+                    col_idx = openpyxl.utils.column_index_from_string(col)
+                    cell = ws.cell(row=row_num, column=col_idx)
+                    cell.font = Font(name='\u4eff\u5b8b', size=10)
+                    cell.alignment = Alignment(horizontal='center', vertical='center')
+                    cell.border = Border(
+                        left=Side(style='thin'), right=Side(style='thin'),
+                        top=Side(style='thin'), bottom=Side(style='thin'))
+
+                    # Longitude -> DMS
+                    if key == '\u7ecf\u5ea6' and val:
+                        dms = decimal_to_dms(val, is_latitude=False)
+                        cell.value = dms if dms else str(val)
+                    # Latitude -> DMS
+                    elif key == '\u7eac\u5ea6' and val:
+                        dms = decimal_to_dms(val, is_latitude=True)
+                        cell.value = dms if dms else str(val)
+                    # 水位标高 = 地面高程 - 地下水位埋深
+                    elif key == '\u6c34\u4f4d\u6807\u9ad8':
+                        elev = record.get('\u5730\u9762\u9ad8\u7a0b')
+                        depth = record.get('\u5730\u4e0b\u6c34\u4f4d\u57cb\u6df1')
+                        if elev and depth:
+                            cell.value = f"=L{row_num}-V{row_num}"
+                        else:
+                            cell.value = None
                     # 测点高程 = 地面高程
-                    if key == "测点高程":
-                        elev = record.get("地面高程")
+                    elif key == '\u6d4b\u70b9\u9ad8\u7a0b':
+                        elev = record.get('\u5730\u9762\u9ad8\u7a0b')
                         if elev is not None and elev != '':
-                            cell = ws[f"{col}{target}"]
-                            cell.font = tf; cell.alignment = ta; cell.border = tb
                             try: cell.value = float(elev)
                             except: cell.value = str(elev)
-                        continue
-                    
-                    if val is None or val == '': continue
-                    
-                    cell = ws[f"{col}{target}"]
-                    cell.font = tf; cell.alignment = ta; cell.border = tb
-                    if key in ("井台高度","井深","测点距地面高度","地下水位埋深","测点距水面距离","地面高程","X","Y"):
+                    elif val is None or val == '':
+                        cell.value = None
+                    elif key == '\u8c03\u67e5\u65e5\u671f':
+                        cell.value = normalize_date(val)
+                    elif key in numeric_keys:
                         try: cell.value = float(val)
                         except: cell.value = str(val)
-                    elif key == "调查日期":
-                        cell.value = normalize_date(val)
                     else:
                         cell.value = str(val)
-            
+
+                row_num += 1
+
             wb.save(path)
-            QMessageBox.information(self, "导出成功",
-                f"已保存到:\n{path}\n\n更新 {updated} 行，新增 {added} 行\n其中 {with_coords} 条已自动填入坐标")
-            self.status_label.setText(f"已导出 // EXPORTED: {updated}+{added} rows")
+            QMessageBox.information(self, "\u5bfc\u51fa\u6210\u529f",
+                f"\u5df2\u4fdd\u5b58\u5230:\n{path}\n\n\u5171 {added} \u6761\u8bb0\u5f55")
+            self.status_label.setText(f"\u5df2\u5bfc\u51fa // EXPORTED: {added} rows")
         except Exception as e:
-            QMessageBox.critical(self, "导出失败", str(e))
-    
-    def _clear(self):
-        self.records = []
-        self.files = []
-        self.table.setRowCount(0)
-        self.btn_export.setVisible(False)
-        self.lbl_total.setText("待处理文件: 0")
-        self.lbl_extracted.setText("已提取记录: 0")
-        self.lbl_coords.setText("含坐标记录: 0")
-        self.lbl_matched.setText("模板匹配: 0")
-        self.lbl_files.setText("拖拽或导入截图文件夹")
-        self.lbl_files.setStyleSheet("color: #999999; font-size: 13px;")
-        self.status_label.setText("就绪 // READY")
+            QMessageBox.critical(self, "\u5bfc\u51fa\u5931\u8d25", str(e))
 
-
-# ── License Dialog ───────────────────────────────────────────────────
 from PySide6.QtWidgets import QDialog as _QDialog
 
 class LicenseDialog(_QDialog):

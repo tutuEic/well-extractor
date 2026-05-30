@@ -779,6 +779,17 @@ class MainWindow(QMainWindow):
                 QApplication.processEvents()  # keep UI responsive every 10 rows
         self.table.setUpdatesEnabled(True)  # single repaint for all changes
     
+    def _clear(self):
+        self.records = []
+        self.files = []
+        self.table.setRowCount(0)
+        self.btn_export.setVisible(False)
+        self.lbl_total.setText("待处理文件: 0")
+        self.lbl_extracted.setText("已提取记录: 0")
+        self.lbl_coords.setText("含坐标记录: 0")
+        self.lbl_matched.setText("模板匹配: 0")
+        self.status_label.setText("就绪 // READY")
+
     def _export(self):
         if not self.records:
             QMessageBox.warning(self, "\u63d0\u793a", "\u6ca1\u6709\u6570\u636e\u53ef\u5bfc\u51fa")

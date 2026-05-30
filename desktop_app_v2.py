@@ -92,15 +92,15 @@ def decimal_to_dms(dd, is_latitude=True):
         dd = float(dd)
     except (ValueError, TypeError):
         return None
-    direction = 'N' if is_latitude else 'E'
+    prefix = 'N' if is_latitude else 'E'
     if dd < 0:
-        direction = 'S' if is_latitude else 'W'
+        prefix = 'S' if is_latitude else 'W'
         dd = abs(dd)
     degrees = int(dd)
     minutes_full = (dd - degrees) * 60
     minutes = int(minutes_full)
     seconds = (minutes_full - minutes) * 60
-    return f"{degrees}°{minutes:02d}'{seconds:07.4f}\""
+    return '{:s}{:d}°{:02d}\'{:07.4f}\"'.format(prefix, degrees, minutes, seconds)
 
 
 def load_coord_index():

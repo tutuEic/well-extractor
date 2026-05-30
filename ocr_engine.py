@@ -218,6 +218,7 @@ def extract_from_image_mimo(image_path, api_key=None, model=None):
         )
         content = resp.choices[0].message.content
         record = _parse_mimo_response(content)
+        record = _postprocess_ocr_record(record)
         return record
 
     except Exception as e:
@@ -691,17 +692,95 @@ def _dedup_chunks(results):
             deduped.append((bbox, text, conf))
     return deduped
 
+
+
 def _rapidocr_to_easyocr(raw_result):
     """Convert RapidOCR output to EasyOCR-compatible format."""
     if not raw_result:
         return []
     converted = []
     for item in raw_result:
-        bbox = [[float(p[0]), float(p[1])] for p in item[0]]
-        text = str(item[1])
+        bbox = [[float(pt[0]), float(pt[1])] for pt in item[0]]
+        txt = str(item[1])
         conf = float(item[2])
-        converted.append((bbox, text, conf))
+        converted.append((bbox, txt, conf))
     return converted
+
+
+def _preprocess_for_ocr(img_array):
+    """Enhance image for better OCR: adaptive binarization + denoising + contrast."""
+    import cv2
+    if len(img_array.shape) == 3:
+        gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+    else:
+        gray = img_array.copy()
+    denoised = cv2.fastNlMeansDenoising(gray, h=10, templateWindowSize=7, searchWindowSize=21)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    enhanced = clahe.apply(denoised)
+    binary = cv2.adaptiveThreshold(enhanced, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 10)
+    result = cv2.cvtColor(binary, cv2.COLOR_GRAY2RGB)
+    return result
+
+
+_OCR_WORD_FIXES = {}
+
+
+def _fix_date(v):
+    if not v:
+        return v
+    if re.fullmatch(r'\d{8}', v):
+        return v
+    m = re.match(r'(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})', v)
+    if m:
+        return f"{m.group(1)}{int(m.group(2)):02d}{int(m.group(3)):02d}"
+    digits = re.sub(r'\D', '', v)
+    if len(digits) >= 8:
+        return digits[:8]
+    return v
+
+
+def _fix_number(v):
+    if not v:
+        return v
+    v = re.sub(r'[mM米]+$', '', v).strip()
+    v = v.replace('O', '0').replace('o', '0')
+    v = v.replace('l', '1').replace('I', '1')
+    v = v.replace('S', '5').replace('s', '5')
+    v = v.replace('B', '8')
+    v = re.sub(r'[^\d.\-]+$', '', v).strip()
+    if v and re.match(r'^[\d.\-]+$', v):
+        return v
+    return v
+
+
+def _fix_coordinate(v):
+    if not v:
+        return v
+    v = v.replace('O', '0').replace('o', '0')
+    v = v.replace('l', '1').replace('I', '1')
+    return v
+
+
+def _postprocess_ocr_record(record):
+    if not record:
+        return record
+    fixed = {}
+    for key, val in record.items():
+        if key.startswith('_') or not isinstance(val, str):
+            fixed[key] = val
+            continue
+        v = val.strip()
+        for bad, good in _OCR_WORD_FIXES.items():
+            v = v.replace(bad, good)
+        if key in ('调查日期', '统测日期'):
+            v = _fix_date(v)
+        elif key in ('井台高度', '井深', '测点距地面高度', '地下水位埋深',
+                     '测点距水面距离', '地面高程', '测点高程', 'X', 'Y'):
+            v = _fix_number(v)
+        elif key in ('经度', '纬度'):
+            v = _fix_coordinate(v)
+        fixed[key] = v if v else val
+    return fixed
 
 
 def extract_from_image_easyocr(image_path):
@@ -709,6 +788,12 @@ def extract_from_image_easyocr(image_path):
     img = Image.open(image_path)
     img_array = np.array(img)
     h, w = img_array.shape[:2]
+
+    # Preprocess for better OCR accuracy
+    try:
+        img_array = _preprocess_for_ocr(img_array)
+    except Exception:
+        pass
 
     # Long images: process in chunks to avoid resizing loss
     if h > 3000:
